@@ -2,6 +2,7 @@ import os
 import subprocess
 import requests
 from requests.auth import HTTPDigestAuth
+import time
 
 # --- Configuration ---
 
@@ -43,16 +44,7 @@ def call_atlas_api():
         print("Error: Missing one or more Atlas environment variables (GROUP_ID, PUBLIC_KEY, PRIVATE_KEY).")
         return
 
-    # --- CUSTOMIZE YOUR API CALL HERE ---
-    # This example updates the IP Access List for your project.
-    # You will need to change the endpoint and payload for your specific needs.
-    
-    # 1. Define the API endpoint
-    endpoint = f"https://cloud.mongodb.com/api/atlas/v2/groups/{ATLAS_GROUP_ID}/clusters"
-    
-    # 2. Create the JSON payload for the request
-    # This payload adds the IP of the GitHub runner for 1 hour.
-    # We get the runner's IP from a trusted service.
+    # --- Step 1: Get the GitHub runner's public IP address ---
     try:
         runner_ip = requests.get('https://api.ipify.org').text
         print(f"Detected CI/CD Runner IP: {runner_ip}")
@@ -60,31 +52,64 @@ def call_atlas_api():
         print(f"Could not fetch runner IP: {e}")
         return
 
-    #payload = [
-    #    {
-    #        "ipAddress": runner_ip,
-    #        "comment": "Allowing CI/CD Runner for deployment",
-    #        "deleteAfterDate": "P1H" # ISO 8601 duration format for 1 hour
-    #    }
-    #]
+    # --- Step 2: Add the runner's IP to the Atlas Access List ---
+    print(f"\nAttempting to add IP {runner_ip} to the access list for 1 hour...")
+    access_list_endpoint = f"https://cloud.mongodb.com/api/atlas/v2/groups/{ATLAS_GROUP_ID}/accessList"
     
-    # 3. Set up the authentication and headers
-    headers = {  
-        "Content-Type": "application/json",  
-        "Accept": "application/vnd.atlas.2025-02-19+json"  
-    } 
+    # This payload adds the IP with a comment and sets it to auto-delete after 1 hour.
+    access_list_payload = [
+        {
+            "ipAddress": runner_ip,
+            "comment": "Allowing CI/CD Runner for deployment",
+            "deleteAfterDate": "P1H" # ISO 8601 duration format for 1 hour
+        }
+    ]
+    
+    access_list_headers = {
+        "Accept": "application/vnd.atlas.2023-01-01+json",
+        "Content-Type": "application/json"
+    }
 
-    print(f"Calling Atlas API endpoint: {endpoint}")
     try:
-        response = requests.post(  
-            endpoint,  
-            headers=headers,  
-            auth=HTTPDigestAuth(ATLAS_PUBLIC_KEY, ATLAS_PRIVATE_KEY),  
-            verify=False  
+        response = requests.post(
+            access_list_endpoint,
+            headers=access_list_headers,
+            auth=HTTPDigestAuth(ATLAS_PUBLIC_KEY, ATLAS_PRIVATE_KEY),
+            json=access_list_payload
+        )
+        response.raise_for_status()
+        print("Successfully added IP to the access list.")
+        # It can take a moment for the access list change to propagate.
+        print("Waiting 15 seconds for the access list change to apply...")
+        time.sleep(15)
+
+    except requests.exceptions.HTTPError as e:
+        # If the IP is already on the list, Atlas returns a 400 error. We can safely ignore it.
+        if e.response.status_code == 400 and "IP_ADDRESS_ALREADY_EXISTS" in e.response.text:
+            print("IP address is already on the access list. Continuing...")
+        else:
+            print(f"Error adding IP to access list: {e.response.status_code}")
+            print("Response Body:", e.response.text)
+            return # Stop execution if we can't add the IP
+
+    # --- Step 3: Proceed with the original API call to list clusters ---
+    print("\nProceeding to list clusters...")
+    clusters_endpoint = f"https://cloud.mongodb.com/api/atlas/v2/groups/{ATLAS_GROUP_ID}/clusters"
+    
+    clusters_headers = {  
+        "Accept": "application/vnd.atlas.2023-01-01+json"
+    }
+
+    print(f"Calling Atlas API endpoint: {clusters_endpoint}")
+    try:
+        response = requests.get(  
+            clusters_endpoint,  
+            headers=clusters_headers,  
+            auth=HTTPDigestAuth(ATLAS_PUBLIC_KEY, ATLAS_PRIVATE_KEY)
         )          
-        response.raise_for_status()  # This will raise an exception for HTTP error codes (4xx or 5xx)
+        response.raise_for_status()
         
-        print("Successfully called Atlas Admin API!")
+        print("\nSuccessfully called Atlas Admin API!")
         print("Response:", response.json())
 
     except requests.exceptions.HTTPError as e:
@@ -101,7 +126,6 @@ def main():
     """
     changed_files = get_changed_files()
 
-    # Check if any of the changed files are in our watch list
     if not FILES_TO_WATCH.isdisjoint(changed_files):
         print("\nMonitored file was changed. Triggering Atlas API call...")
         call_atlas_api()
@@ -110,3 +134,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

@@ -1,7 +1,7 @@
 import os
 import subprocess
 import requests
-from requests_toolbelt.auth.mongodb import MongoDigestAuth
+from requests.auth import HTTPDigestAuth
 
 # --- Configuration ---
 
@@ -69,12 +69,19 @@ def call_atlas_api():
     #]
     
     # 3. Set up the authentication and headers
-    auth = MongoDigestAuth(ATLAS_PUBLIC_KEY, ATLAS_PRIVATE_KEY)
-    headers = {"Accept": "application/vnd.atlas.2023-01-01+json"}
+    headers = {  
+        "Content-Type": "application/json",  
+        "Accept": "application/vnd.atlas.2025-02-19+json"  
+    } 
 
     print(f"Calling Atlas API endpoint: {endpoint}")
     try:
-        response = requests.post(endpoint, auth=auth, headers=headers)
+        response = requests.post(  
+            endpoint,  
+            headers=headers,  
+            auth=HTTPDigestAuth(ATLAS_PUBLIC_KEY, ATLAS_PRIVATE_KEY),  
+            verify=False  
+        )          
         response.raise_for_status()  # This will raise an exception for HTTP error codes (4xx or 5xx)
         
         print("Successfully called Atlas Admin API!")

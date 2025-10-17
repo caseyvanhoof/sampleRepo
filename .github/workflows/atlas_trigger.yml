@@ -1,0 +1,41 @@
+# .github/workflows/atlas_trigger.yml
+
+name: 'Trigger Atlas API on Main Merge'
+
+# This workflow runs on every push to the main branch
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  call-atlas-api:
+    runs-on: ubuntu-latest
+    steps:
+      # Step 1: Check out the repository's code so the script can access it
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        # Fetch the full history, which is needed to compare commits
+        with:
+          fetch-depth: 0
+
+      # Step 2: Set up the Python environment
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      # Step 3: Install the Python script's dependencies
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests requests-toolbelt
+
+      # Step 4: Run the Python script
+      # We pass the Atlas credentials as environment variables for security
+      - name: Run Atlas API Trigger Script
+        env:
+          ATLAS_PUBLIC_KEY: ${{ secrets.ATLAS_PUBLIC_KEY }}
+          ATLAS_PRIVATE_KEY: ${{ secrets.ATLAS_PRIVATE_KEY }}
+          ATLAS_GROUP_ID: ${{ secrets.ATLAS_GROUP_ID }}
+        run: python3 pushTriggerCodeToAtlas.py

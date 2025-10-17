@@ -38,4 +38,6 @@ jobs:
           ATLAS_PUBLIC_KEY: ${{ secrets.ATLAS_PUBLIC_KEY }}
           ATLAS_PRIVATE_KEY: ${{ secrets.ATLAS_PRIVATE_KEY }}
           ATLAS_GROUP_ID: ${{ secrets.ATLAS_GROUP_ID }}
+          ATLAS_APP_ID: ${{ secrets.ATLAS_APP_ID }}
+          ATLAS_FUNCTION_ID: ${{ secrets.ATLAS_FUNCTION_ID }}
         run: python3 pushTriggerCodeToAtlas.py
